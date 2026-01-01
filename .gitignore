@@ -1,0 +1,49 @@
+# Autotools generated files
+Makefile
+Makefile.in
+aclocal.m4
+compile
+config.guess
+config.h
+config.h.in
+config.log
+config.status
+config.sub
+configure
+depcomp
+install-sh
+missing
+stamp-h1
+libtool
+
+# Build directories
+.deps
+.libs
+m4/
+
+# Compiled binaries
+code2snippet
+
+# Object files
+*.o
+*.lo
+*.la
+
+# Test output files
+*.code-snippets
+*.json
+
+# Backup files
+*~
+*.orig
+*.rej
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

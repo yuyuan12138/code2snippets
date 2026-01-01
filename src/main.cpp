@@ -6,6 +6,7 @@
 #include <optional>
 #include <sstream>
 #include <iomanip>
+#include "config.h"
 
 namespace fs = std::filesystem;
 
@@ -18,10 +19,12 @@ struct SnippetConfig {
 struct CommandLineArgs {
     std::string inputFile;
     std::string outputFile;
+    std::string configPath;
     std::optional<std::string> name;
     std::optional<std::string> prefix;
     std::optional<std::string> description;
     bool append = false;
+    bool showConfigPath = false;
 };
 
 void printUsage(const char* programName) {
@@ -35,11 +38,20 @@ void printUsage(const char* programName) {
               << "  -p, --prefix <prefix>    Custom snippet prefix (default: derived from filename)\n"
               << "  -d, --description <desc> Custom snippet description (default: based on filename)\n"
               << "  -a, --append             Append to existing snippets file instead of overwriting\n"
+              << "  -c, --config <path>      Path to custom configuration file\n"
+              << "  --show-config            Show which config file is being used\n"
               << "  -h, --help               Show this help message\n\n"
+              << "Configuration Files:\n"
+              << "  Searched in order:\n"
+              << "    1. .code2snippet.json (current directory)\n"
+              << "    2. .code2snippet/config.json (current directory)\n"
+              << "    3. ~/.config/code2snippet/config.json (user config)\n"
+              << "    4. /etc/code2snippet/config.json (system config)\n\n"
               << "Examples:\n"
               << "  " << programName << " -i utils.cpp -o my-snippets.code-snippets\n"
               << "  " << programName << " -i script.py -o python.code-snippets -n myfunc -p mf\n"
-              << "  " << programName << " -i code.txt -o snippets.json -a\n";
+              << "  " << programName << " -i code.txt -o snippets.json -a\n"
+              << "  " << programName << " -c myconfig.json -i main.cpp -o cpp.code-snippets\n";
 }
 
 std::string getBaseName(const std::string& filepath) {
@@ -179,6 +191,11 @@ bool parseCommandLine(int argc, char* argv[], CommandLineArgs& args) {
             args.description = argv[i];
         } else if (arg == "-a" || arg == "--append") {
             args.append = true;
+        } else if (arg == "-c" || arg == "--config") {
+            if (++i >= argc) return false;
+            args.configPath = argv[i];
+        } else if (arg == "--show-config") {
+            args.showConfigPath = true;
         } else {
             std::cerr << "Unknown option: " << arg << "\n";
             return false;
@@ -255,34 +272,79 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    try {
-        // Generate snippet config
-        SnippetConfig config = generateConfigFromFilename(args.inputFile);
+    // Load configuration file
+    AppConfig config;
+    std::string configPath = ConfigParser::findConfigFile(args.configPath);
+    bool hasConfig = false;
 
-        // Override with command line options if provided
-        if (args.name) config.name = *args.name;
-        if (args.prefix) config.prefix = *args.prefix;
-        if (args.description) config.description = *args.description;
+    if (!configPath.empty()) {
+        hasConfig = ConfigParser::parse(configPath, config);
+        if (hasConfig && args.showConfigPath) {
+            std::cout << "Using config file: " << configPath << "\n";
+        }
+    } else if (args.showConfigPath) {
+        std::cout << "No config file found (using defaults)\n";
+    }
+
+    if (config.settings.verbose) {
+        std::cout << "Verbose mode enabled\n";
+    }
+
+    try {
+        // Generate snippet config from filename
+        SnippetConfig snippetConfig = generateConfigFromFilename(args.inputFile);
+
+        // Apply config file defaults if not set by command line
+        if (!args.name && config.settings.defaultName) {
+            snippetConfig.name = *config.settings.defaultName;
+        }
+        if (!args.prefix && config.settings.defaultPrefix) {
+            snippetConfig.prefix = *config.settings.defaultPrefix;
+        }
+        if (!args.description && config.settings.defaultDescription) {
+            snippetConfig.description = *config.settings.defaultDescription;
+        }
+
+        // Command line options override both defaults and config file
+        if (args.name) snippetConfig.name = *args.name;
+        if (args.prefix) snippetConfig.prefix = *args.prefix;
+        if (args.description) snippetConfig.description = *args.description;
+
+        // Apply default append mode from config if not set by command line
+        bool appendMode = args.append;
+        if (!appendMode && config.settings.defaultAppend) {
+            appendMode = true;
+        }
+
+        // Apply default output directory from config
+        std::string outputFile = args.outputFile;
+        if (config.settings.defaultOutputDir.has_value()) {
+            fs::path outputPath(outputFile);
+            if (outputPath.is_relative()) {
+                fs::path defaultDir(*config.settings.defaultOutputDir);
+                outputFile = (defaultDir / outputPath).string();
+            }
+        }
 
         // Read file content
         std::vector<std::string> contentLines = readFileContent(args.inputFile);
 
         // Generate JSON snippet
-        std::string snippetJson = generateSnippetJson(config, contentLines);
+        std::string snippetJson = generateSnippetJson(snippetConfig, contentLines);
 
         // Write output
-        if (args.append) {
-            std::string existing = readExistingSnippets(args.outputFile);
+        if (appendMode) {
+            std::string existing = readExistingSnippets(outputFile);
             std::string merged = mergeSnippets(existing, snippetJson);
-            writeSnippets(args.outputFile, merged);
+            writeSnippets(outputFile, merged);
         } else {
-            writeSnippets(args.outputFile, "{\n" + snippetJson + "\n}\n");
+            writeSnippets(outputFile, "{\n" + snippetJson + "\n}\n");
         }
 
         std::cout << "Snippet created successfully!\n";
-        std::cout << "  Name: " << config.name << "\n";
-        std::cout << "  Prefix: " << config.prefix << "\n";
-        std::cout << "  Output: " << args.outputFile << "\n";
+        std::cout << "  Name: " << snippetConfig.name << "\n";
+        std::cout << "  Prefix: " << snippetConfig.prefix << "\n";
+        std::cout << "  Output: " << outputFile << "\n";
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

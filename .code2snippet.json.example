@@ -1,0 +1,31 @@
+{
+  "settings": {
+    "defaultName": "my_snippet",
+    "defaultPrefix": "myprefix",
+    "defaultDescription": "My code snippet",
+    "defaultOutputDir": "./snippets",
+    "defaultAppend": false,
+    "verbose": false
+  }
+}
+
+// Configuration file options:
+//
+// defaultName:        Default snippet name (overridden by command-line -n)
+// defaultPrefix:      Default snippet prefix (overridden by command-line -p)
+// defaultDescription: Default snippet description (overridden by command-line -d)
+// defaultOutputDir:   Default directory for output files (relative paths are resolved)
+// defaultAppend:      Whether to append to existing snippet files by default
+// verbose:            Enable verbose output
+//
+// You can also use a flat format without the "settings" wrapper:
+// {
+//   "defaultName": "my_snippet",
+//   "defaultAppend": true
+// }
+//
+// Config file search locations (in order):
+// 1. .code2snippet.json (current directory)
+// 2. .code2snippet/config.json (current directory)
+// 3. ~/.config/code2snippet/config.json (user config)
+// 4. /etc/code2snippet/config.json (system config)
